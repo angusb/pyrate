@@ -1,11 +1,12 @@
 import bencode
 import math
-import util
 
-class TorrentFile():
-    def __init__(self, file_name, info_dict=None):
+from util import sha1_hash
+
+class TorrentFile(object):
+    def __init__(self, file_name, metainfo=None):
         """Constructs a TorrentFile by reading a .torrent file or
-        using a info_dict.
+        using a info_dict. If metainfo is passsed, file_name is not read.
 
         Args:
             file_name (str)
@@ -13,19 +14,27 @@ class TorrentFile():
             info_dict (dict)
         """
         # TODO: Error checking
-        with open(file_name, 'r') as f:
-            contents = f.read()
+        if not metainfo:
+            with open(file_name, 'r') as f:
+                contents = f.read()
 
-        if not info_dict:
-            self.info_dict = bencode.bdecode(contents)
-        else:
-            self.info_dict = info_dict
-            self._generate(info_dict)
-
-        # self.info_hash = util.sha1_hash(self.info_dict['info'])
+        self.metainfo = metainfo if metainfo else bencode.bdecode(contents)
+        self.info_dict = self.metainfo['info']
+        self.info_hash = sha1_hash(str(bencode.bencode(self.info_dict)))
 
     @classmethod
-    def write_torrent(cls, file_name, tracker_url, content, piece_length=512):
+    def create_torrent(cls, 
+                       file_name, 
+                       tracker_url, 
+                       content, 
+                       piece_length=512,
+                       write=True):
+        # TODO: add other options like:
+        #       * announce-list
+        #       * creation date
+        #       * comment
+        #       * created by
+        #       * encoding
         info_dict = {
             'name': file_name,
             'length': len(contents),
@@ -39,10 +48,20 @@ class TorrentFile():
             'announce': tracker_url
         }
 
-        with open(file_name, 'w') as f:
-            f.write(bencode.bencode(metainfo))
+        if write:
+            with open(file_name, 'w') as f:
+                f.write(bencode.bencode(metainfo))
 
-        return cls(file_name, info_dic)
+        return cls(file_name, metainfo)
+
+    def get_length(self):
+        # Single File
+        if 'length' in self.info_dict:
+            return info['length']
+
+        # Multi-file format (could be a single file)
+        files = self.info_dict['files']
+        return sum(f['length'] for f in files)
 
     @classmethod
     def _pieces_hashes(cls, string, piece_lenth):
