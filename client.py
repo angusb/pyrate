@@ -1,11 +1,11 @@
-import socket
 import random
 import string
 import time
-import util
-import requests
 
+import requests
 import bencode
+
+from peer import Peer
 
 PEER_ID = '-AB0700-'
 PORT = 6882
@@ -17,24 +17,20 @@ class Client(object):
         self.uploaded = 0
         self.event = 'started'
         self.tracker_id = None
+
+        self.peers = []
         # self.numwant
 
     def set_torrent(self, torrent):
         self.torrent = torrent
         self.bytes_left = torrent.get_length()
 
-    def handshake(self, peer_id):
+    def handshake(self):
         pstrlen = chr(19)
         pstr = 'BitTorrent protocol'
-        reserved = '\x00\x00\x00\x00\x00\x00\x00\x00'
-        h_msg = pstrlen + pstr + self.torrent.info_hash + self.my_peer_id
-
-    def peer_handshake(self, h_msg):
-        pstrlen = h_msg[0]
-        pstr = payload[1:20]
-        reserved = payload[20:28]
-        info_hash = payload[28:48]
-        peer_id = payload[48:68]
+        reserved = chr(0) * 8
+        h_msg = pstrlen + pstr + reserved + self.torrent.info_hash + self.my_peer_id
+        return h_msg
 
     def _gen_own_peer_id(self):
         """Return a 20 byte string to be used as a unique ID for this client"""
@@ -44,6 +40,7 @@ class Client(object):
         return PEER_ID + seed
 
     def announce(self):
+        print 'Announcing to tracker...'
         # TODO: served cached copies, add requests.get to reactor, add a response 
         #       handler that is called.
 
@@ -70,7 +67,8 @@ class Client(object):
         if not req.ok:
             raise Exception('Problem with Tracker')
 
-        rd = bencode.bdecode(req.text)
+        # Note: req.text returns a 'utf-8' encoding of req.content.
+        rd = bencode.bdecode(req.content)
         if 'failure_reason' in rd:
             raise Exception(rd['failure_reason'])
 
@@ -82,14 +80,35 @@ class Client(object):
         self.tracker_id = rd.get('tracker_id', self.tracker_id)
         self.min_interval = rd.get('min interval', None)
 
+        # # Set the timeout of the reactor to the announce interval
+        # if self.min_interval:
+        #     self.reactor.timeout = self.min_interval
+        # else:
+        #     self.reactor.timeout = self.inteval
+
         peers_raw = rd['peers']
         if isinstance(peers_raw, dict):
+            # Must then check peer_id matches at handshake
             raise Exception('Dicitionary peers model not yet implemented.')
 
+        # Break peers_raw into list of (ip, port) tuples
         peers_bytes = (peers_raw[i:i+6] for i in range(0, len(peers_raw), 6))
         peer_addrs = (map(ord, peer) for peer in peers_bytes)
-        peers = ['.'.join(map(str, p[0:4])) + ':' + str(p[4]*256 + p[5]) for p in peer_addrs]
+        peers = [('.'.join(map(str, p[0:4])), p[4]*256 + p[5]) for p in peer_addrs]
+        print peers
 
-        return peers
+        # Create a peer and add him to the list if he does not yet exist
+        existing_peers = [x.host_and_port() for x in self.peers]
+        for peer in peers:
+            if peer not in existing_peers:
+                p = Peer(self, host, port)
+                self.peers.append(p)
+                self.reactor.add_reader_writer(peer)
 
+    def connect_first_peer(self):
+        if not self.peers:
+            raise Exception('No peers!')
+
+        host, port = self.peers[2]
+        p = Peer(self, host, port)
 

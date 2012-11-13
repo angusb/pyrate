@@ -29,12 +29,7 @@ class TorrentFile(object):
                        content, 
                        piece_length=512,
                        write=True):
-        # TODO: add other options like:
-        #       * announce-list
-        #       * creation date
-        #       * comment
-        #       * created by
-        #       * encoding
+        # TODO: add other options like: announce-list, creation date, comment, created by, encoding
         info_dict = {
             'name': file_name,
             'length': len(contents),
@@ -57,7 +52,7 @@ class TorrentFile(object):
     def get_length(self):
         # Single File
         if 'length' in self.info_dict:
-            return info['length']
+            return self.info_dict['length']
 
         # Multi-file format (could be a single file)
         files = self.info_dict['files']
