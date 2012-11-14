@@ -37,10 +37,10 @@ class Reactor(object):
         while self.readers or self.writers:
             reads, writes, excepts = select.select(self.readers, self.writers, self.excepts, timeout)
 
-            print 'Reads: ', reads
-            print 'Writes: ', writes
-            print 'Excepts: ', excepts
-            print
+            # print 'Reads: ', reads
+            # print 'Writes: ', writes
+            # print 'Excepts: ', excepts
+            # print
 
             # TODO: not right --- Timeout, announce to Tracker
             if not (reads or writes or excepts):

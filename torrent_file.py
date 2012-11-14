@@ -20,7 +20,7 @@ class TorrentFile(object):
 
         self.metainfo = metainfo if metainfo else bencode.bdecode(contents)
         self.info_dict = self.metainfo['info']
-        self.info_hash = sha1_hash(str(bencode.bencode(self.info_dict)))
+        self.info_hash = sha1_hash(bencode.bencode(self.info_dict))
 
     @classmethod
     def create_torrent(cls, 

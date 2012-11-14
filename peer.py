@@ -13,7 +13,8 @@ class Peer(object):
         self.host = host
         self.port = port
         self.read_buffer = ''
-        self.queue = []
+        self.write_buffer = ''
+        self.send_queue = []
 
         self.am_choking = True
         self.am_interested = False
@@ -34,14 +35,18 @@ class Peer(object):
         # # Receive handshake
         # self._receive_handshake()
 
+        def __repr__(self):
+            return '<Peer {ip}:{port}>'.format(ip=self.ip, port=self.port)
+
     def add_message(self, msg):
         """Add a message (str or Msg) to the queue to be sent."""
-        if isinstance(msg, str):
-            self.queue.append(msg)
-        elif isinstance(msg, Msg):
-            self.queue.append(msg.bytestring)
-        else:
-            raise Exception('Can\'t add message of type %s' % type(msg))
+        self.send_queue.append(msg)
+        # if isinstance(msg, str):
+        #     self.send_queue.append(msg)
+        # elif isinstance(msg, Msg):
+        #     self.send_queue.append(msg.bytestring)
+        # else:
+        #     raise Exception('Can\'t add message of type %s' % type(msg))
 
     def host_and_port(self):
         """Return a tuple of host and port of the peer"""
@@ -68,6 +73,7 @@ class Peer(object):
         msgs, self.read_buffer = self.parse_message(self.read_buffer)
 
         # TODO: enforce that the first message ever received is a handshake
+        #       and isn't received again...?
 
         for msg in msgs:
             print 'Reading message %s' % msg.kind
@@ -80,16 +86,30 @@ class Peer(object):
                     self.add_message(m)
                     self.add_message(Msg('unchoke'))
                     self.add_message(Msg('interested'))
+
             elif msg.kind == 'choke' or msg.kind == 'unchoke':
                 self.peer_choking = True if msg.kind == 'choke' else False
+
             elif msg.kind == 'interested' or msg.kind == 'not_interested':
                 self.peer_interested = True if msg.kind == 'interested' else False
+
             else:
                 print 'not yet implemented'
 
     def write_data(self):
-        self.sock.send(self.queue[0])
-        pass
+        for s in self.send_queue:
+            self.write_buffer += str(s)
+
+        self.send_queue = []
+
+        if self.write_buffer:
+            print 'len prior to write', len(self.write_buffer)
+            bytes_sent = self.sock.send(self.write_buffer)
+            print 'num bytes written', bytes_sent
+            self.write_buffer = self.write_buffer[bytes_sent:]
+
+        # else:
+        #     self.reactor.remove_writer(self)
 
     def parse_message(self, buff):
         """Returns a tuple of a list of Msg's and the remaining bytes.
@@ -112,7 +132,7 @@ class Peer(object):
         return msgs, buff
 
     def is_good_handshake(self, buff):
-        if self.client.torrent.info_hash != buff[28:48]:
+        if self.client.torrent.info_hash != buff:
             return False # TODO raise?
         return True
 
