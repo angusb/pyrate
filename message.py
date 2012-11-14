@@ -33,6 +33,7 @@ class Msg(object):
         if kind not in MSG_ARGS:
             raise TypeError('__init__() not a valid kind of message')
 
+        self._kind = kind
         for arg in MSG_ARGS[kind]:
             try:
                 setattr(self, arg, kwargs[arg])

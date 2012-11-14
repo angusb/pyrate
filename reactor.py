@@ -15,8 +15,8 @@ class Reactor(object):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # huh?
         # self.server.setblocking(False)
-        server.bind(('localhost', PORT))
-        server.listen(QUEUED_CNXNS)
+        self.server.bind(('localhost', PORT))
+        self.server.listen(QUEUED_CNXNS)
 
         self.readers = [self.server]
         self.writers = []
@@ -28,14 +28,8 @@ class Reactor(object):
         self.timeout = timeout
 
     def add_reader_writer(self, rwriter):
-        readers.append(rwriter)
-        writers.append(rwriter)
-
-    def add_reader(self, reader):
-        readers.append(reader)
-
-    def add_writer(self, writer):
-        readers.append(writer)
+        self.readers.append(rwriter)
+        self.writers.append(rwriter)
 
     def start(self):
         timeout = 10
@@ -43,23 +37,29 @@ class Reactor(object):
         while self.readers or self.writers:
             reads, writes, excepts = select.select(self.readers, self.writers, self.excepts, timeout)
 
+            print 'Reads: ', reads
+            print 'Writes: ', writes
+            print 'Excepts: ', excepts
+            print
+
             # TODO: not right --- Timeout, announce to Tracker
             if not (reads or writes or excepts):
-                print 'timed out'
+                print 'Timed out!'
                 self.client.announce()
                 continue
 
-            for s in reads:
-                if s is self.server:
+            for r in reads:
+                if r is self.server:
+                    print 'Peer attempting to connect to me!'
                     connection, peer_host = s.accept()
                     peer = Peer(self.client, peer_host[0], peer_host[1], connection)
                     self.add_reader_writer(peer)
 
-                elif s isinstance(Peer):
-                    peer.read_data()
+                elif isinstance(r, Peer):
+                    r.read_data()
 
             for w in writes:
-                if w isinstance(Peer):
-                    peer.write_data()
+                if isinstance(w, Peer):
+                    w.write_data()
 
 

@@ -1,12 +1,13 @@
 import socket
 
+import message
 from message import Msg
 
 PORT = 6882
 RECV_LEN = 1024*1024
 
 class Peer(object):
-    def __init__(self, client, host, port, socket=None):
+    def __init__(self, client, host, port, sock=None):
         self.client = client # reference to client
 
         self.host = host
@@ -19,18 +20,19 @@ class Peer(object):
         self.peer_choking = True
         self.peer_interested = False
 
-        if not socket:
+        if not sock:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((self.host, self.port))
         else:
-            self.sock = socket
-
-        self.add_message(self.client.handshake())
+            self.sock = sock
 
         # The one connecting to a peer is oblidged to handshake immediately
-        self._send_handshake()
+        self.add_message(self.client.handshake())
 
-        # Receive handshake
-        self._receive_handshake()
+        # self._send_handshake()
+
+        # # Receive handshake
+        # self._receive_handshake()
 
     def add_message(self, msg):
         """Add a message (str or Msg) to the queue to be sent."""
@@ -39,7 +41,7 @@ class Peer(object):
         elif isinstance(msg, Msg):
             self.queue.append(msg.bytestring)
         else:
-            raise Exception('Can\'t add message of tyep %s' % type(msg))
+            raise Exception('Can\'t add message of type %s' % type(msg))
 
     def host_and_port(self):
         """Return a tuple of host and port of the peer"""
@@ -47,23 +49,25 @@ class Peer(object):
 
     def fileno(self):
         """Gives the illusion that this object is a file descriptor."""
-        return self.sock.fileno
+        return self.sock.fileno()
 
     def read_data(self):
         try:
            data = self.sock.recv(RECV_LEN)
         except socket.error, e:
-            print 'Connection dieing to peer %s because connection refused.' % self.host
+            # print 'Connection dieing to peer %s because connection refused.' % self.host
             # self.client.reactor.remove_reader(self).
             return
 
         if not data:
-            print "Connecting dieing because we didn't receive data from %s." % self.host
+            # print "Connecting dieing because we didn't receive data from %s." % self.host
             # self.client.reactor.remove_reader(self)
             return
 
         self.read_buffer += data
         msgs, self.read_buffer = self.parse_message(self.read_buffer)
+
+        # TODO: enforce that the first message ever received is a handshake
 
         for msg in msgs:
             print 'Reading message %s' % msg.kind
@@ -76,13 +80,16 @@ class Peer(object):
                     self.add_message(m)
                     self.add_message(Msg('unchoke'))
                     self.add_message(Msg('interested'))
-
-            if msg.kind == 'choke' or msg.kind == 'unchoke':
+            elif msg.kind == 'choke' or msg.kind == 'unchoke':
                 self.peer_choking = True if msg.kind == 'choke' else False
             elif msg.kind == 'interested' or msg.kind == 'not_interested':
                 self.peer_interested = True if msg.kind == 'interested' else False
             else:
                 print 'not yet implemented'
+
+    def write_data(self):
+        self.sock.send(self.queue[0])
+        pass
 
     def parse_message(self, buff):
         """Returns a tuple of a list of Msg's and the remaining bytes.
@@ -105,7 +112,7 @@ class Peer(object):
         return msgs, buff
 
     def is_good_handshake(self, buff):
-        if self.client.torrent.info_hash != buff[28:48]
+        if self.client.torrent.info_hash != buff[28:48]:
             return False # TODO raise?
         return True
 

@@ -1,11 +1,13 @@
 import random
 import string
 import time
+import socket
 
 import requests
 import bencode
 
 from peer import Peer
+from reactor import Reactor
 
 PEER_ID = '-AB0700-'
 PORT = 6882
@@ -17,6 +19,7 @@ class Client(object):
         self.uploaded = 0
         self.event = 'started'
         self.tracker_id = None
+        self.reactor = Reactor(self)
 
         self.peers = []
         # self.numwant
@@ -95,15 +98,27 @@ class Client(object):
         peers_bytes = (peers_raw[i:i+6] for i in range(0, len(peers_raw), 6))
         peer_addrs = (map(ord, peer) for peer in peers_bytes)
         peers = [('.'.join(map(str, p[0:4])), p[4]*256 + p[5]) for p in peer_addrs]
-        print peers
+
+        self._update_peers(peers)
+
+    def _update_peers(self, peers):
+        # # TODO remove...
+        # ip_filter = lambda x: False if x[0] == '38.117.156.148' else True
+        # peers = filter(ip_filter, peers)
+        # print peers
 
         # Create a peer and add him to the list if he does not yet exist
         existing_peers = [x.host_and_port() for x in self.peers]
+        print existing_peers
         for peer in peers:
             if peer not in existing_peers:
-                p = Peer(self, host, port)
+                try:
+                    p = Peer(self, peer[0], peer[1])
+                except socket.error, e:
+                    continue
+
                 self.peers.append(p)
-                self.reactor.add_reader_writer(peer)
+                self.reactor.add_reader_writer(p)
 
     def connect_first_peer(self):
         if not self.peers:

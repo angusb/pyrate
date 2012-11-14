@@ -7,7 +7,7 @@ def main():
 	c.set_torrent(t)
 
 	c.announce()
-	c.connect_first_peer()
+	c.reactor.start()
 
 if __name__ == '__main__':
 	main()
