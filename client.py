@@ -98,7 +98,7 @@ class Client(object):
         peers_bytes = (peers_raw[i:i+6] for i in range(0, len(peers_raw), 6))
         peer_addrs = (map(ord, peer) for peer in peers_bytes)
         peers = [('.'.join(map(str, p[0:4])), p[4]*256 + p[5]) for p in peer_addrs]
-
+        print peers
         self._update_peers(peers)
 
     def _update_peers(self, peers):

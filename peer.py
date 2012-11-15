@@ -1,5 +1,7 @@
 import socket
 
+from bitarray import bitarray
+
 import message
 from message import Msg
 
@@ -15,6 +17,8 @@ class Peer(object):
         self.read_buffer = ''
         self.write_buffer = ''
         self.send_queue = []
+
+        self.pieces = set()
 
         self.am_choking = True
         self.am_interested = False
@@ -84,7 +88,7 @@ class Peer(object):
                             info_hash=self.client.torrent.info_hash,
                             peer_id=self.client.my_peer_id)
                     self.add_message(m)
-                    self.add_message(Msg('unchoke'))
+                    # self.add_message(Msg('unchoke'))
                     self.add_message(Msg('interested'))
 
             elif msg.kind == 'choke' or msg.kind == 'unchoke':
@@ -92,6 +96,20 @@ class Peer(object):
 
             elif msg.kind == 'interested' or msg.kind == 'not_interested':
                 self.peer_interested = True if msg.kind == 'interested' else False
+
+            elif msg.kind == "bitfield":
+                byte_field = [ord(b) for b in msg.bitfield]
+                for byte_idx, byte in enumerate(byte_field):
+                    # Most significant bit corresponds to smaller piece index
+                    for i in range(8):
+                        has_piece = (byte >> i) & 1
+                        if has_piece:
+                            self.pieces.add(byte_idx * 8 + i)
+                print self.pieces
+
+            elif msg.kind == "have":
+                print 'has index:', msg.index
+                self.pieces.add(msg.index)
 
             else:
                 print 'not yet implemented'
@@ -135,16 +153,3 @@ class Peer(object):
         if self.client.torrent.info_hash != buff:
             return False # TODO raise?
         return True
-
-    def _receive_handshake(self):
-        h_shk = self.sock.recv(49 + 19) # 49 + pstrlen
-        if self.client.torrent.info_hash != h_shk[28:48]: #TODO
-            raise Exception('Bad info_hash received in handshake') # TODO: Error check on this
-        self.peer_id = h_shk[48:68]
-
-    def _send_handshake(self):
-        print 'host: %s' % self.host
-        print 'port: %d' % self.port
-
-        self.sock.connect((self.host, self.port))
-        self.sock.send(self.client.handshake())

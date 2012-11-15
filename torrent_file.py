@@ -3,6 +3,8 @@ import math
 
 from util import sha1_hash
 
+BLOCK_SIZE = 2**14
+
 class TorrentFile(object):
     def __init__(self, file_name, metainfo=None):
         """Constructs a TorrentFile by reading a .torrent file or
@@ -22,6 +24,10 @@ class TorrentFile(object):
         self.info_dict = self.metainfo['info']
         self.info_hash = sha1_hash(bencode.bencode(self.info_dict))
 
+        print 'num pieces: ', self.num_pieces()
+
+        # self._init_pieces()
+
     @classmethod
     def create_torrent(cls, 
                        file_name, 
@@ -34,7 +40,7 @@ class TorrentFile(object):
             'name': file_name,
             'length': len(contents),
             # Fields common to single and multi-file below
-            'piece_length': piece_length * 1024,
+            'piece length': piece_length * 1024,
             'pieces': cls._pieces_hashes(contents)
         }
 
@@ -48,6 +54,22 @@ class TorrentFile(object):
                 f.write(bencode.bencode(metainfo))
 
         return cls(file_name, metainfo)
+
+    def _init_pieces(self):
+        """Initialize self.pieces to be a list of Pieces"""
+        pieces_string = self.info_dict['pieces']
+        piece_length = self.info_dict['piece length']
+
+        hashes = [pieces_string[i: i+20] for i in range(0, len(pieces_string), 20)]
+        num_pieces = len(hashes)
+        num_blocks = piece_length / BLOCK_SIZE
+
+        num_leftover = self.info_dict['length'] - ((num_pieces - 1) * piece_length)
+        num_final_blocks = int(math.ceil(float(num_leftover) / BLOCK_SIZE))
+        final_size = num_leftover % BLOCK_SIZE
+
+        self.pieces = [Piece(hashes[i], num_blocks) for i in range(num_pieces-1)]
+        self.pieces.append(FinalPiece(hashes[-1], num_final_blocks, final_size))
 
     def get_length(self):
         # Single File
@@ -78,9 +100,6 @@ class TorrentFile(object):
 
         return output
 
-    def _num_pieces(self, contents):
-        length = len(contents)
-        if length < self.piece_length:
-            return 1
-        else:
-            return int(math.ceil(float(length) / self.piece_length))
+    def num_pieces(self):
+        length = self.info_dict['length']
+        return int(math.ceil(float(length) / self.info_dict['piece length']))
