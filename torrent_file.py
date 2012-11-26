@@ -1,10 +1,13 @@
 import hashlib
 import math
+import logging
 
 import bencode
 
 from piece import Piece
 from constants import BLOCK_SIZE
+
+log = logging.getLogger('torrent')
 
 class TorrentFile(object):
     def __init__(self, file_name, metainfo=None):
@@ -27,7 +30,7 @@ class TorrentFile(object):
         self.info_hash = hashlib.sha1(bencode.bencode(self.info_dict)).digest()
         self._init_pieces()
 
-        print 'Torrent has %d pieces\n' % self.num_pieces()
+        log.info('Torrent %s has %d pieces\n' % (file_name, self.num_pieces()))
 
     @classmethod
     def create_torrent(cls, 

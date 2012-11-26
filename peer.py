@@ -1,9 +1,12 @@
 import socket
+import logging
 
 from bitarray import bitarray
 
 import message
 from message import Msg
+
+log = logging.getLogger('peer')
 
 RECV_LEN = 1024*1024
 
@@ -66,13 +69,13 @@ class Peer(object):
         try:
            data = self.sock.recv(RECV_LEN)
         except socket.error, e:
-            print 'Connection dieing to peer %s because connection refused.' % self.host
+            log.info('Connection dieing to peer %s because connection refused.' % self.host)
             self.client.reactor.remove_reader_writer(self)
             return
 
         # Connection has been closed
         if not data:
-            print "Connecting dieing because we didn't receive data from %s." % self.host
+            log.info("Connecting dieing because we didn't receive data from %s." % self.host)
             self.client.reactor.remove_reader_writer(self)
             return
 
@@ -84,7 +87,8 @@ class Peer(object):
             try:
                 self.msg_handler[msg.kind](msg)
             except KeyError, e:
-                print "'%s' not implemented yet.."
+                log.debug('%s not implemented yet' % e)
+                print "'%s' not implemented yet.." % e
 
     def _handshake(self, msg):
         if self.handshake:
@@ -102,7 +106,7 @@ class Peer(object):
     def _unchoke(self, msg):
         self.peer_choking = False
         if not self.am_interested:
-            print 'We are getting unchoked yet we aren\'t interested...'
+            log.warning('We are getting unchoked yet we aren\'t interested...')
 
         if self.am_interested or self.client.strategy.am_interested(self):
             self.prepare_next_request()
@@ -129,7 +133,6 @@ class Peer(object):
                     if has_piece:
                         self.pieces.add(byte_idx * 8 + i)
         else:
-            print 'has index:', msg.index
             self.pieces.add(msg.index)
 
         strat_interested = self.client.strategy.am_interested(self)
@@ -144,7 +147,7 @@ class Peer(object):
 
     def _piece(self, msg):
         if self.peer_choking:
-            print 'in an impossible state of being choked yet receiving a msg..?'
+            log.error('in an impossible state of being choked yet receiving a msg..?')
 
         complete = self.client.strategy.add_piece_block(msg.index,
                                                         msg.begin,

@@ -39,11 +39,11 @@ class Strategy(object):
         piece = self.torrent.pieces[piece_index]
 
         if piece.full or piece.has_block(offset):
-            print 'Receiving piece data that we already have...'
+            log.info('Receiving piece data that we already have...')
             return False
 
         if len(data) != BLOCK_SIZE:
-            print 'Receiving a block that is not equal to BLOCK_SIZE'
+            log.info('Receiving a block that is not equal to BLOCK_SIZE')
             return False
 
         piece.add(offset, data)
@@ -58,6 +58,7 @@ class Strategy(object):
                 # return Msg('have', index=piece_index) # TODO: broadcast
             else:
                 print 'hash check doesn\'t validate'
+                log.warning('Hash check on piece %d doesn\'t validate' % piece_index)
                 return False
                 # TODO. drop the piece
         return False
