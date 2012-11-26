@@ -7,7 +7,9 @@ import requests
 import bencode
 
 from peer import Peer
+from message import Msg
 from reactor import Reactor
+from strategy import Strategy
 
 PEER_ID = '-AB0700-'
 PORT = 6882
@@ -25,6 +27,7 @@ class Client(object):
         # self.numwant
 
     def set_torrent(self, torrent):
+        self.strategy = Strategy(torrent)
         self.torrent = torrent
         self.bytes_left = torrent.get_length()
 
@@ -102,12 +105,8 @@ class Client(object):
         self._update_peers(peers)
 
     def _update_peers(self, peers):
-        # # TODO remove...
-        # ip_filter = lambda x: False if x[0] == '38.117.156.148' else True
-        # peers = filter(ip_filter, peers)
-        # print peers
-
-        # Create a peer and add him to the list if he does not yet exist
+        """Provided a list of tuples of peers, attempt to establish a socket if
+        we are not already connected to him."""
         existing_peers = [x.host_and_port() for x in self.peers]
         print existing_peers
         for peer in peers:
@@ -120,10 +119,7 @@ class Client(object):
                 self.peers.append(p)
                 self.reactor.add_reader_writer(p)
 
-    def connect_first_peer(self):
-        if not self.peers:
-            raise Exception('No peers!')
-
-        host, port = self.peers[2]
-        p = Peer(self, host, port)
-
+    def broadcast_have(self, piece_index, exclude=None):
+        for peer in self.peers:
+            if not exclude == peer:
+                peer.add_message(Msg('have', index=piece_index))

@@ -18,18 +18,35 @@ class Reactor(object):
         self.server.bind(('localhost', PORT))
         self.server.listen(QUEUED_CNXNS)
 
-        self.readers = [self.server]
-        self.writers = []
-        self.excepts = []
+        self.readers = set([self.server])
+        self.writers = set()
+        self.excepts = set()
 
         self.timeout = TIMEOUT
 
     def set_timeout(self, timeout):
         self.timeout = timeout
 
+    def reg_writer(self, writer):
+        if writer in self.writers:
+            print 'reging writer that already exists'
+        self.writers.add(writer)
+
+    def unreg_writer(self, writer):
+        if writer not in self.writers:
+            print 'unregging writer that does not exist'
+        self.writers.discard(writer)
+
     def add_reader_writer(self, rwriter):
-        self.readers.append(rwriter)
-        self.writers.append(rwriter)
+        self.readers.add(rwriter)
+        self.writers.add(rwriter)
+
+    def remove_reader_writer(self, rwriter):
+        if rwriter not in self.readers:
+            print 'Removing a reader that was not in Reactor\'s readers'
+
+        self.writers.remove(rwriter)
+        self.readers.remove(rwriter)
 
     def start(self):
         timeout = 10
@@ -51,8 +68,8 @@ class Reactor(object):
             for r in reads:
                 if r is self.server:
                     print 'Peer attempting to connect to me!'
-                    connection, peer_host = s.accept()
-                    peer = Peer(self.client, peer_host[0], peer_host[1], connection)
+                    connection, (ip, port) = s.accept()
+                    peer = Peer(self.client, ip, port, connection)
                     self.add_reader_writer(peer)
 
                 elif isinstance(r, Peer):

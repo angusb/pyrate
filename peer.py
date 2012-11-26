@@ -5,12 +5,11 @@ from bitarray import bitarray
 import message
 from message import Msg
 
-PORT = 6882
 RECV_LEN = 1024*1024
 
 class Peer(object):
     def __init__(self, client, host, port, sock=None):
-        self.client = client # reference to client
+        self.client = client
 
         self.host = host
         self.port = port
@@ -18,6 +17,7 @@ class Peer(object):
         self.write_buffer = ''
         self.send_queue = []
 
+        self.handshake = None
         self.pieces = set()
 
         self.am_choking = True
@@ -31,26 +31,28 @@ class Peer(object):
         else:
             self.sock = sock
 
+        self.msg_handler = {
+            'handshake': self._handshake,
+            'choke': self._choke,
+            'unchoke': self._unchoke,
+            'interested': self._interested,
+            'not_interested': self._not_interested,
+            'bitfield': self._have_or_bitfield,
+            'have': self._have_or_bitfield,
+            'piece': self._piece,
+        }
+
         # The one connecting to a peer is oblidged to handshake immediately
         self.add_message(self.client.handshake())
+        # self.add_message(self.client.strategy.bitfield())
 
-        # self._send_handshake()
-
-        # # Receive handshake
-        # self._receive_handshake()
-
-        def __repr__(self):
-            return '<Peer {ip}:{port}>'.format(ip=self.ip, port=self.port)
+    def __repr__(self):
+        return '<Peer {host}:{port}>'.format(host=self.host, port=self.port)
 
     def add_message(self, msg):
         """Add a message (str or Msg) to the queue to be sent."""
+        self.client.reactor.reg_writer(self)
         self.send_queue.append(msg)
-        # if isinstance(msg, str):
-        #     self.send_queue.append(msg)
-        # elif isinstance(msg, Msg):
-        #     self.send_queue.append(msg.bytestring)
-        # else:
-        #     raise Exception('Can\'t add message of type %s' % type(msg))
 
     def host_and_port(self):
         """Return a tuple of host and port of the peer"""
@@ -64,57 +66,102 @@ class Peer(object):
         try:
            data = self.sock.recv(RECV_LEN)
         except socket.error, e:
-            # print 'Connection dieing to peer %s because connection refused.' % self.host
-            # self.client.reactor.remove_reader(self).
+            print 'Connection dieing to peer %s because connection refused.' % self.host
+            self.client.reactor.remove_reader_writer(self)
             return
 
+        # Connection has been closed
         if not data:
-            # print "Connecting dieing because we didn't receive data from %s." % self.host
-            # self.client.reactor.remove_reader(self)
+            print "Connecting dieing because we didn't receive data from %s." % self.host
+            self.client.reactor.remove_reader_writer(self)
             return
 
         self.read_buffer += data
         msgs, self.read_buffer = self.parse_message(self.read_buffer)
 
-        # TODO: enforce that the first message ever received is a handshake
-        #       and isn't received again...?
-
         for msg in msgs:
             print 'Reading message %s' % msg.kind
+            try:
+                self.msg_handler[msg.kind](msg)
+            except KeyError, e:
+                print "'%s' not implemented yet.."
 
-            if msg.kind == 'handshake':
-                if self.is_good_handshake(msg.info_hash): # TODO: blacklist?
-                    m = Msg('handshake',
-                            info_hash=self.client.torrent.info_hash,
-                            peer_id=self.client.my_peer_id)
-                    self.add_message(m)
-                    # self.add_message(Msg('unchoke'))
-                    self.add_message(Msg('interested'))
+    def _handshake(self, msg):
+        if self.handshake:
+            raise Exception('Received second handshake')
 
-            elif msg.kind == 'choke' or msg.kind == 'unchoke':
-                self.peer_choking = True if msg.kind == 'choke' else False
+        self.handshake = msg
+        if not self.is_good_handshake(msg.info_hash): # TODO: blacklist?
+            raise Exception('Received handshake with bad info hash')
 
-            elif msg.kind == 'interested' or msg.kind == 'not_interested':
-                self.peer_interested = True if msg.kind == 'interested' else False
+    def _choke(self, msg):
+        self.peer_choking = True
+        if self.am_interested or self.client.strategy.am_interested(self):
+            self.add_message(Msg('interested'))
 
-            elif msg.kind == "bitfield":
-                byte_field = [ord(b) for b in msg.bitfield]
-                for byte_idx, byte in enumerate(byte_field):
-                    # Most significant bit corresponds to smaller piece index
-                    for i in range(8):
-                        has_piece = (byte >> i) & 1
-                        if has_piece:
-                            self.pieces.add(byte_idx * 8 + i)
-                print self.pieces
+    def _unchoke(self, msg):
+        self.peer_choking = False
+        if not self.am_interested:
+            print 'We are getting unchoked yet we aren\'t interested...'
 
-            elif msg.kind == "have":
-                print 'has index:', msg.index
-                self.pieces.add(msg.index)
+        if self.am_interested or self.client.strategy.am_interested(self):
+            self.prepare_next_request()
 
-            else:
-                print 'not yet implemented'
+    def _interested(self, msg):
+        self.peer_interested = True
+        if self.am_choking:
+            self.add_message(Msg('unchoke')) # TODO
+            self.am_choking = False
+
+    def _not_interested(self, msg):
+        self.peer_interested = False
+        if not self.am_choking:
+            self.add_message(Msg('choke'))
+            self.am_choking = True
+
+    def _have_or_bitfield(self, msg):
+        if msg.kind == 'bitfield':
+            byte_field = [ord(b) for b in msg.bitfield]
+            for byte_idx, byte in enumerate(byte_field):
+                # Most significant bit corresponds to smaller piece index
+                for i in range(8):
+                    has_piece = (byte >> i) & 1
+                    if has_piece:
+                        self.pieces.add(byte_idx * 8 + i)
+        else:
+            print 'has index:', msg.index
+            self.pieces.add(msg.index)
+
+        strat_interested = self.client.strategy.am_interested(self)
+
+        if not self.am_interested and strat_interested:
+            self.am_interested = True
+            self.add_message(Msg('interested'))
+            return
+
+        if not self.peer_choking and self.am_interested and strat_interested:
+            self.prepare_next_request()
+
+    def _piece(self, msg):
+        if self.peer_choking:
+            print 'in an impossible state of being choked yet receiving a msg..?'
+
+        complete = self.client.strategy.add_piece_block(msg.index,
+                                                        msg.begin,
+                                                        msg.block)
+        if complete:
+            self.client.broadcast_have(msg.index, exclude=self)
+
+        if self.client.strategy.am_interested(self):
+            self.prepare_next_request()
+
+    def prepare_next_request(self):
+        for msg in self.client.strategy.get_next_request(self):
+            self.add_message(msg)
 
     def write_data(self):
+        print self.send_queue
+
         for s in self.send_queue:
             self.write_buffer += str(s)
 
@@ -125,7 +172,7 @@ class Peer(object):
             bytes_sent = self.sock.send(self.write_buffer)
             print 'num bytes written', bytes_sent
             self.write_buffer = self.write_buffer[bytes_sent:]
-
+            self.client.reactor.unreg_writer(self)
         # else:
         #     self.reactor.remove_writer(self)
 

@@ -1,9 +1,10 @@
-import bencode
+import hashlib
 import math
 
-from util import sha1_hash
+import bencode
 
-BLOCK_SIZE = 2**14
+from piece import Piece
+from constants import BLOCK_SIZE
 
 class TorrentFile(object):
     def __init__(self, file_name, metainfo=None):
@@ -20,13 +21,13 @@ class TorrentFile(object):
             with open(file_name, 'r') as f:
                 contents = f.read()
 
+        # TODO: make into properties?
         self.metainfo = metainfo if metainfo else bencode.bdecode(contents)
         self.info_dict = self.metainfo['info']
-        self.info_hash = sha1_hash(bencode.bencode(self.info_dict))
+        self.info_hash = hashlib.sha1(bencode.bencode(self.info_dict)).digest()
+        self._init_pieces()
 
-        print 'num pieces: ', self.num_pieces()
-
-        # self._init_pieces()
+        print 'Torrent has %d pieces\n' % self.num_pieces()
 
     @classmethod
     def create_torrent(cls, 
@@ -69,7 +70,7 @@ class TorrentFile(object):
         final_size = num_leftover % BLOCK_SIZE
 
         self.pieces = [Piece(hashes[i], num_blocks) for i in range(num_pieces-1)]
-        self.pieces.append(FinalPiece(hashes[-1], num_final_blocks, final_size))
+        self.pieces.append(Piece(hashes[-1], num_final_blocks)) #final size
 
     def get_length(self):
         # Single File
