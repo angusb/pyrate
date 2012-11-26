@@ -95,3 +95,16 @@ class Strategy(object):
             ]
 
         return msgs
+
+    # TODO: Place in ActiveTorrent
+    def get_bitfield(self):
+        bitfield = ''
+        groups_of_eight = map(lambda x: range(x, x+8),
+                              range(0, self.torrent.num_pieces(), 8))
+        for group in groups_of_eight:
+            bvls = map(lambda x: 2**x[0] if x[1] in self.has_pieces else 0,
+                       enumerate(group))
+            byte = chr(sum(bvls))
+            bitfield += byte
+
+        return bitfield
