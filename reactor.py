@@ -4,7 +4,7 @@ import time
 
 from peer import Peer
 
-PORT = 6882
+PORT = 6881
 QUEUED_CNXNS = 20
 TIMEOUT = 10
 
@@ -36,6 +36,9 @@ class Reactor(object):
         if writer not in self.writers:
             print 'unregging writer that does not exist'
         self.writers.discard(writer)
+
+    def add_reader(self, reader):
+        self.readers.add(reader)
 
     def add_reader_writer(self, rwriter):
         self.readers.add(rwriter)
@@ -73,7 +76,7 @@ class Reactor(object):
                     self.add_reader_writer(peer)
 
                 elif isinstance(r, Peer):
-                    r.read_data()
+                    r.read_event()
 
             for w in writes:
                 if isinstance(w, Peer):

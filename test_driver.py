@@ -1,6 +1,6 @@
 import logging
 
-from client import client
+from client import Client
 from torrent import ActiveTorrent
 
 def main():
@@ -13,6 +13,7 @@ def main():
     log = logging.getLogger('test_driver')
     log.info('Starting up...')
 
+    client = Client()
     client.add_torrent('tom.torrent')
     client.reactor.start()
 

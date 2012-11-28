@@ -3,14 +3,17 @@ import logging
 
 import message
 from message import Msg
-import client
 
 log = logging.getLogger('peer')
 
 RECV_LEN = 1024*1024
 
 class Peer(object):
-    def __init__(self, host, port, atorrent=None, sock=None):
+    def __init__(self, host, port, atorrent=None, client=None, sock=None):
+        if not ((not atorrent and (client and sock)) or
+                (atorrent and (not client and not sock))):
+            raise TypeError('Peer can only be constructed with an ActiveTorrent ' +
+                            'or a client and socket')
         self.atorrent = atorrent
 
         self.host = host
@@ -47,6 +50,8 @@ class Peer(object):
         # If we are connecting, we are oblidged to handshake immediately
         if atorrent:
             self.establish_connection()
+        else:
+            self.client = client
 
     def __repr__(self):
         return '<Peer {host}:{port}>'.format(host=self.host, port=self.port)
@@ -68,13 +73,13 @@ class Peer(object):
         self.add_message(self.atorrent.handshake())
 
         bitfield = self.atorrent.strategy.get_bitfield()
-        self.add_message(Msg('bitfield', bitfield=bitfield)
+        self.add_message(Msg('bitfield', bitfield=bitfield))
 
     def fileno(self):
         """Gives the illusion that this object is a file descriptor."""
         return self.sock.fileno()
 
-    def read_data(self):
+    def read_event(self):
         try:
            data = self.sock.recv(RECV_LEN)
         except socket.error, e:
@@ -109,7 +114,7 @@ class Peer(object):
 
         # If there is no associated torrent, set it
         if not self.atorrent:
-            found_torrent = client.client.add_torrent_peer(self, msg.info_hash)
+            found_torrent = self.client.add_torrent_peer(self, msg.info_hash)
             if not found_torrent:
                 log.info('Removing peer %s:%s because no related',
                          'torrent was found.' % (self.host, self.port))

@@ -210,7 +210,7 @@ class ActiveTorrent(TorrentFile):
         for peer in peers:
             if peer not in existing_peers:
                 try:
-                    p = Peer(peer[0], peer[1], self)
+                    p = Peer(peer[0], peer[1], atorrent=self)
                 except socket.error, e:
                     continue
 
