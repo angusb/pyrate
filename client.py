@@ -1,42 +1,32 @@
 import random
 import string
 import time
-import socket
 
-import requests
-import bencode
-
-from peer import Peer
-from message import Msg
 from reactor import Reactor
 from strategy import Strategy
+from torrent import ActiveTorrent
 
 PEER_ID = '-AB0700-'
-PORT = 6882
+print 'yoyoma'
 
 class Client(object):
     def __init__(self):
-        self.my_peer_id = self._gen_own_peer_id()
-        self.downloaded = 0 # TODO: right place for this?
-        self.uploaded = 0
-        self.event = 'started'
-        self.tracker_id = None
+        self._peer_id = self._gen_own_peer_id()
         self.reactor = Reactor(self)
+        self.atorrents = []
 
-        self.peers = []
-        # self.numwant
+    @property
+    def peer_id(self):
+        return self._peer_id
+
+    def add_torrent(self, torrent_name):
+        torrent = ActiveTorrent(self, torrent_name, Strategy)
+        torrent.announce()
+        self.atorrents.append(torrent)
 
     def set_torrent(self, torrent):
         self.strategy = Strategy(torrent)
         self.torrent = torrent
-        self.bytes_left = torrent.get_length()
-
-    def handshake(self):
-        pstrlen = chr(19)
-        pstr = 'BitTorrent protocol'
-        reserved = chr(0) * 8
-        h_msg = pstrlen + pstr + reserved + self.torrent.info_hash + self.my_peer_id
-        return h_msg
 
     def _gen_own_peer_id(self):
         """Return a 20 byte string to be used as a unique ID for this client"""
@@ -45,81 +35,5 @@ class Client(object):
         seed = ''.join(random.choice(seed_chars) for x in range(remain))
         return PEER_ID + seed
 
-    def announce(self):
-        print 'Announcing to tracker...'
-        # TODO: served cached copies, add requests.get to reactor, add a response 
-        #       handler that is called.
-
-        # TODO: other params: 'numwant' 'ip'
-
-        req_params = {
-            'info_hash': self.torrent.info_hash,
-            'peer_id': self.my_peer_id,
-            'port': PORT,
-            'uploaded': self.uploaded,
-            'downloaded': self.downloaded,
-            'left': self.bytes_left,
-            'event': self.event,
-            'compact': 1, # some trackers will refuse requests without 'compact=1'
-        }
-
-        if self.tracker_id:
-            req_params['trackerid'] = self.trackerid
-
-        tracker_url = self.torrent.metainfo['announce']
-        self.handle_tracker_response(requests.get(tracker_url, params=req_params))
-
-    def handle_tracker_response(self, req):
-        if not req.ok:
-            raise Exception('Problem with Tracker')
-
-        # Note: req.text returns a 'utf-8' encoding of req.content.
-        rd = bencode.bdecode(req.content)
-        if 'failure_reason' in rd:
-            raise Exception(rd['failure_reason'])
-
-        self.interval = rd.get('interval', None)
-        self.complete = rd.get('complete', None)
-        self.incomplete = rd.get('incomplete', None)
-
-        # Optional keys a tracker may return
-        self.tracker_id = rd.get('tracker_id', self.tracker_id)
-        self.min_interval = rd.get('min interval', None)
-
-        # # Set the timeout of the reactor to the announce interval
-        # if self.min_interval:
-        #     self.reactor.timeout = self.min_interval
-        # else:
-        #     self.reactor.timeout = self.inteval
-
-        peers_raw = rd['peers']
-        if isinstance(peers_raw, dict):
-            # Must then check peer_id matches at handshake
-            raise Exception('Dicitionary peers model not yet implemented.')
-
-        # Break peers_raw into list of (ip, port) tuples
-        peers_bytes = (peers_raw[i:i+6] for i in range(0, len(peers_raw), 6))
-        peer_addrs = (map(ord, peer) for peer in peers_bytes)
-        peers = [('.'.join(map(str, p[0:4])), p[4]*256 + p[5]) for p in peer_addrs]
-        print peers
-        self._update_peers(peers)
-
-    def _update_peers(self, peers):
-        """Provided a list of tuples of peers, attempt to establish a socket if
-        we are not already connected to him."""
-        existing_peers = [x.host_and_port() for x in self.peers]
-        print existing_peers
-        for peer in peers:
-            if peer not in existing_peers:
-                try:
-                    p = Peer(self, peer[0], peer[1])
-                except socket.error, e:
-                    continue
-
-                self.peers.append(p)
-                self.reactor.add_reader_writer(p)
-
-    def broadcast_have(self, piece_index, exclude=None):
-        for peer in self.peers:
-            if not exclude == peer:
-                peer.add_message(Msg('have', index=piece_index))
+# Expose singleton object
+client = Client()

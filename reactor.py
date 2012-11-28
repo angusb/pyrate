@@ -62,14 +62,14 @@ class Reactor(object):
             # TODO: not right --- Timeout, announce to Tracker
             if not (reads or writes or excepts):
                 print 'Timed out!'
-                self.client.announce()
+                # TODO: self.client.announce()
                 continue
 
             for r in reads:
                 if r is self.server:
                     print 'Peer attempting to connect to me!'
                     connection, (ip, port) = s.accept()
-                    peer = Peer(self.client, ip, port, connection)
+                    peer = Peer(ip, port, connection)
                     self.add_reader_writer(peer)
 
                 elif isinstance(r, Peer):

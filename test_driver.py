@@ -1,7 +1,7 @@
 import logging
 
-from torrent_file import TorrentFile
-from client import Client
+from client import client
+from torrent import ActiveTorrent
 
 def main():
     logging.basicConfig(filename='bt.log',
@@ -13,12 +13,8 @@ def main():
     log = logging.getLogger('test_driver')
     log.info('Starting up...')
 
-    t = TorrentFile('tom.torrent')
-    c = Client()
-    c.set_torrent(t)
-
-    c.announce()
-    c.reactor.start()
+    client.add_torrent('tom.torrent')
+    client.reactor.start()
 
 if __name__ == '__main__':
     main()

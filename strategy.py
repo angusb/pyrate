@@ -17,9 +17,9 @@ REQ_THRESHOLD = 10
 
 class Strategy(object):
     def __init__(self, atorrent):
-        self.torrent = atorrent
+        self.atorrent = atorrent
 
-        self.has_pieces = set(range(atorrent.num_pieces())) # TODO persistence?
+        self.has_pieces = set()
         self.wants_pieces = set(range(atorrent.num_pieces()))
         self.requested_pieces = set()
 
@@ -36,7 +36,7 @@ class Strategy(object):
         Returns:
             bool
         """
-        piece = self.torrent.pieces[piece_index]
+        piece = self.atorrent.pieces[piece_index]
 
         if piece.full or piece.has_block(offset):
             log.info('Receiving piece data that we already have...')
@@ -83,14 +83,14 @@ class Strategy(object):
             else:
                 return []
             
-        piece = self.torrent.pieces[piece_num_to_fetch]
+        piece = self.atorrent.pieces[piece_num_to_fetch]
 
         assert not piece.full, 'Set logic is broken'
 
         msgs = [
-            Msg('request', 
-                index=piece_num_to_fetch, 
-                begin=begin, 
+            Msg('request',
+                index=piece_num_to_fetch,
+                begin=begin,
                 length=length)
             for begin, length in piece.empty_blocks()
             ]
@@ -101,7 +101,7 @@ class Strategy(object):
     def get_bitfield(self):
         bitfield = ''
         groups_of_eight = map(lambda x: range(x, x+8),
-                              range(0, self.torrent.num_pieces(), 8))
+                              range(0, self.atorrent.num_pieces(), 8))
         for group in groups_of_eight:
             bvls = map(lambda x: 2**x[0] if x[1] in self.has_pieces else 0,
                        enumerate(group))
