@@ -101,6 +101,7 @@ class ActiveTorrent(TorrentFile):
     def __init__(self, client, filename, strategy_class=None):
         super(ActiveTorrent, self).__init__(filename)
 
+        self.filename = filename
         self.client = client
 
         if strategy_class:

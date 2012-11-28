@@ -29,9 +29,18 @@ class Client(object):
         torrent.announce()
         self.atorrents.append(torrent)
 
-    def set_torrent(self, torrent):
-        self.strategy = Strategy(torrent)
-        self.torrent = torrent
+    def add_torrent_peer(self, peer, info_hash):
+        info_hash_filter = lambda x: x.info_hash != info_hash
+        matching_torrent = filter(info_hash_filter, self.atorrents)
+        assert len(matching_torrent) <= 1
+
+        if not matching_torrent:
+            self.reactor.remove_reader_writer(peer)
+            return
+
+        peer.atorrent = matching_torrent[0]
+        log.info('Adding peer %s to torrent %s' %
+                 (repr(peer), matching_torrent[0]))
 
     def receive_incoming_connection(self, sock, host, port):
         peer = Peer(host, port, client=self, sock=sock)
