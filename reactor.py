@@ -12,13 +12,7 @@ class Reactor(object):
     def __init__(self, client):
         self.client = client
 
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # huh?
-        # self.server.setblocking(False)
-        self.server.bind(('localhost', PORT))
-        self.server.listen(QUEUED_CNXNS)
-
-        self.readers = set([self.server])
+        self.readers = set()
         self.writers = set()
         self.excepts = set()
 
@@ -69,14 +63,7 @@ class Reactor(object):
                 continue
 
             for r in reads:
-                if r is self.server:
-                    print 'Peer attempting to connect to me!'
-                    connection, (ip, port) = s.accept()
-                    peer = Peer(ip, port, connection)
-                    self.add_reader_writer(peer)
-
-                elif isinstance(r, Peer):
-                    r.read_event()
+                r.read_event()
 
             for w in writes:
                 if isinstance(w, Peer):
