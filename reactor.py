@@ -22,8 +22,6 @@ class Reactor(object):
         self.timeout = timeout
 
     def reg_writer(self, writer):
-        if writer in self.writers:
-            print 'reging writer that already exists'
         self.writers.add(writer)
 
     def unreg_writer(self, writer):
@@ -66,7 +64,6 @@ class Reactor(object):
                 r.read_event()
 
             for w in writes:
-                if isinstance(w, Peer):
-                    w.write_data()
+                w.write_data()
 
 

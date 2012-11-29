@@ -7,8 +7,10 @@ import requests
 import bencode
 
 from peer import Peer
-from piece import Piece
+from message import Msg
 from strategy import Strategy
+from filewriter import FileWriter
+from piece import Piece, FinalPiece
 
 from constants import BLOCK_SIZE
 log = logging.getLogger('torrent')
@@ -114,6 +116,8 @@ class ActiveTorrent(TorrentFile):
         self.bytes_left = self.get_length()
         self.peers = []
 
+        self.file_writer = FileWriter(self)
+
         self._init_pieces()
 
     def _init_pieces(self):
@@ -130,7 +134,7 @@ class ActiveTorrent(TorrentFile):
         final_size = num_leftover % BLOCK_SIZE
 
         self.pieces = [Piece(hashes[i], num_blocks) for i in range(num_pieces-1)]
-        self.pieces.append(Piece(hashes[-1], num_final_blocks)) #final size        
+        self.pieces.append(FinalPiece(hashes[-1], num_final_blocks, final_size))
 
     def broadcast_have(self, piece_index, exclude=None):
         for peer in self.peers:

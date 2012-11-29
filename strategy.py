@@ -1,5 +1,10 @@
+import logging
+
 from message import Msg
+from piece import FinalPiece
 from constants import BLOCK_SIZE
+
+log = logging.getLogger('strategy')
 
 # TODO: REQUESTED PIECES
 # 
@@ -42,8 +47,8 @@ class Strategy(object):
             log.info('Receiving piece data that we already have...')
             return False
 
-        if len(data) != BLOCK_SIZE:
-            log.info('Receiving a block that is not equal to BLOCK_SIZE')
+        if len(data) != BLOCK_SIZE and not isinstance(piece, FinalPiece): # TODO
+            log.critical('Receiving an odd block size - %d' % len(data))
             return False
 
         piece.add(offset, data)
@@ -84,7 +89,6 @@ class Strategy(object):
                 return []
             
         piece = self.atorrent.pieces[piece_num_to_fetch]
-
         assert not piece.full, 'Set logic is broken'
 
         msgs = [

@@ -98,11 +98,11 @@ class Peer(object):
 
         for msg in msgs:
             print 'Reading message %s' % msg.kind
-            try:
-                self.msg_handler[msg.kind](msg)
-            except KeyError, e:
-                log.debug('%s not implemented yet' % e)
-                print "'%s' not implemented yet.." % e
+            # try:
+            self.msg_handler[msg.kind](msg)
+            # except KeyError, e:
+            #     log.debug('%s not implemented yet' % e)
+            #     print "'%s' not implemented yet.." % e
 
     def _handshake(self, msg):
         if self.handshake:
@@ -151,10 +151,11 @@ class Peer(object):
             byte_field = [ord(b) for b in msg.bitfield]
             for byte_idx, byte in enumerate(byte_field):
                 # Most significant bit corresponds to smaller piece index
-                for i in range(8):
+                for i in reversed(range(8)):
                     has_piece = (byte >> i) & 1
                     if has_piece:
-                        self.pieces.add(byte_idx * 8 + i)
+                        self.pieces.add(byte_idx * 8 + (7-i))
+            log.info('peer has pieces ' + str(self.pieces))
         else:
             self.pieces.add(msg.index)
 
@@ -169,6 +170,7 @@ class Peer(object):
             self.prepare_next_request()
 
     def _piece(self, msg):
+        print 'Reading message piece %d' % msg.index
         if self.peer_choking:
             log.error('in an impossible state of being choked yet receiving a msg..?')
 
@@ -177,6 +179,8 @@ class Peer(object):
                                                           msg.block)
         if complete:
             self.atorrent.broadcast_have(msg.index, exclude=self)
+            piece = self.atorrent.pieces[msg.index]
+            self.atorrent.file_writer.add_piece(msg.index, piece.data)
 
         if self.atorrent.strategy.am_interested(self):
             self.prepare_next_request()
@@ -194,9 +198,9 @@ class Peer(object):
         self.send_queue = []
 
         if self.write_buffer:
-            print 'len prior to write', len(self.write_buffer)
+            # print 'len prior to write', len(self.write_buffer)
             bytes_sent = self.sock.send(self.write_buffer)
-            print 'num bytes written', bytes_sent
+            # print 'num bytes written', bytes_sent
             self.write_buffer = self.write_buffer[bytes_sent:]
             self.atorrent.client.reactor.unreg_writer(self)
         # else:
