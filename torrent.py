@@ -9,7 +9,7 @@ import bencode
 from peer import Peer
 from message import Msg
 from strategy import Strategy
-from filewriter import FileWriter
+from filewriter import FileManager
 from piece import Piece, FinalPiece
 
 from constants import BLOCK_SIZE
@@ -116,7 +116,7 @@ class ActiveTorrent(TorrentFile):
         self.bytes_left = self.get_length()
         self.peers = []
 
-        self.file_writer = FileWriter(self)
+        self.file_writer = FileManager(self)
 
         self._init_pieces()
 

@@ -60,7 +60,6 @@ class Strategy(object):
             self.requested_pieces.discard(piece_index)
             if piece.validates():
                 return True
-                # return Msg('have', index=piece_index) # TODO: broadcast
             else:
                 print 'hash check doesn\'t validate'
                 log.warning('Hash check on piece %d doesn\'t validate' % piece_index)
