@@ -92,7 +92,7 @@ class TorrentFile(object):
             else:
                 to_position = current_pos + piece_length
 
-            piece_hash = util.sha1_hash(string[current_pos:to_position])
+            piece_hash = hashlib.sha1(string[current_pos:to_position]).digest()
             output += piece_hash
             current_pos += piece_length
 
