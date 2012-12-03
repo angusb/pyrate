@@ -41,7 +41,7 @@ class FileWriter(object):
         self.filemgr.atorrent.client.reactor.unreg_writer(self)
 
         if self.bytes_written == self.filesize:
-            log.info("File '%s' finished. Closing.." % self.f)
+            log.info("File '%s' finished. Closing.." % self.filename)
             self.file.close()
 
 class FileManager(object):

@@ -37,7 +37,6 @@ class Client(object):
         if not matching_torrent:
             log.info('Invalid peer: no torrent found for info_hash %s' %
                      info_hash)
-            self.reactor.remove_reader_writer(peer)
             return
 
         peer.atorrent = matching_torrent[0]

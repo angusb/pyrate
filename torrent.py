@@ -39,6 +39,7 @@ class TorrentFile(object):
         log.info('Torrent %s has %d pieces\n' % (file_name, self.num_pieces()))
 
     def get_length(self):
+        """Return the byte length of all files within this torrent."""
         # Single File
         if 'length' in self.info_dict:
             return self.info_dict['length']
@@ -48,6 +49,7 @@ class TorrentFile(object):
         return sum(f['length'] for f in files)
 
     def num_pieces(self):
+        """Return the number of pieces within this torrent."""
         length = self.info_dict['length']
         return int(math.ceil(float(length) / self.info_dict['piece length']))
 
@@ -221,3 +223,24 @@ class ActiveTorrent(TorrentFile):
 
                 self.peers.append(p)
                 self.client.reactor.add_reader_writer(p)
+
+    def drop_peer(self, peer):
+        """Drop a peer by unregistering him with the reactor and removing him
+        from the list of peers."""
+
+        self.client.reactor.remove_reader_writer(peer)
+        log.info('Removed %s from reactor' % repr(peer))
+
+        self.peers = filter(lambda x: x != peer, self.peers)
+        log.info('Removed %s from torrent %s' % (repr(peer), self.filename))
+
+    def finish(self):
+        assert self.strategy.has_all_pieces()
+        log.info("torrent '%s' complete" % self.filename)
+
+        # Update state for tracker announce
+        self.event = 'completed'
+        self.left = 0
+
+        for peer in self.peers:
+            peer.add_message(Msg('not_interested'))

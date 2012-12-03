@@ -8,6 +8,9 @@ log = logging.getLogger('peer')
 
 RECV_LEN = 1024*1024
 
+class PeerException(Exception):
+    pass
+
 class Peer(object):
     def __init__(self, host, port, atorrent=None, client=None, sock=None):
         if not ((not atorrent and (client and sock)) or
@@ -49,6 +52,7 @@ class Peer(object):
 
         # If we are connecting, we are oblidged to handshake immediately
         if atorrent:
+            self.client = atorrent.client
             self.establish_connection()
         else:
             self.client = client
@@ -57,7 +61,20 @@ class Peer(object):
         return '<Peer {host}:{port}>'.format(host=self.host, port=self.port)
 
     def add_message(self, msg):
-        """Add a message (str or Msg) to the queue to be sent."""
+        """Add a message (str or Msg) to the queue to be sent. If the msg
+        is a particular type of message (choke, unchoke, interested,
+        not_interested) update the internal state.
+        """
+        if isinstance(msg, Msg):
+            if msg.kind == 'choke':
+                self.am_choking = True
+            elif msg.kind == 'unchoke':
+                self.am_choking = False
+            elif msg.kind == 'interested':
+                self.am_interested = True
+            elif msg.kind == 'not_interested':
+                self.am_interested = False
+
         self.atorrent.client.reactor.reg_writer(self)
         self.send_queue.append(msg)
 
@@ -84,13 +101,13 @@ class Peer(object):
            data = self.sock.recv(RECV_LEN)
         except socket.error, e:
             log.info('Connection dieing to peer %s because connection refused.' % self.host)
-            self.atorrent.client.reactor.remove_reader_writer(self)
+            self.client.reactor.remove_reader_writer(self)
             return
 
         # Connection has been closed
         if not data:
             log.info("Connecting dieing because we didn't receive data from %s." % self.host)
-            self.atorrent.client.reactor.remove_reader_writer(self)
+            self.client.reactor.remove_reader_writer(self)
             return
 
         self.read_buffer += data
@@ -98,28 +115,32 @@ class Peer(object):
 
         for msg in msgs:
             print 'Reading message %s' % msg.kind
-            # try:
-            self.msg_handler[msg.kind](msg)
-            # except KeyError, e:
-            #     log.debug('%s not implemented yet' % e)
-            #     print "'%s' not implemented yet.." % e
+            try:
+                self.msg_handler[msg.kind](msg)
+            except PeerException, p:
+                log.info('Dropping peer %s - ' % (repr(self), str(p)))
+                self.atorrent.drop_peer(self)
+            except KeyError, e:
+                log.debug('%s not implemented yet' % e)
+                print "'%s' not implemented yet.." % e
 
     def _handshake(self, msg):
         if self.handshake:
-            raise Exception('Received second handshake')
+            raise PeerException('Received second handshake')
 
         self.handshake = msg
-        if not self.is_good_handshake(msg.info_hash): # TODO: blacklist?
-            raise Exception('Received handshake with bad info hash')
 
-        # If there is no associated torrent, set it
+        # If there is no associated torrent, set it. This is the last place
+        # where we will have to fuss with state relating to the parrent torrent
         if not self.atorrent:
             found_torrent = self.client.add_torrent_peer(self, msg.info_hash)
             if not found_torrent:
-                log.info('Removing peer %s:%s because no related',
-                         'torrent was found.' % (self.host, self.port))
-                client.client.reactor.remove_reader_writer(self)
-                # TODO: more cleanup?
+                log.info('Removing %s because no related torrent was found.' %
+                         repr(Peer))
+                self.client.reactor.remove_reader_writer(self)
+        else:
+            if not self.is_good_handshake(msg.info_hash):
+                raise PeerException('Received handshake with bad info hash')
 
     def _choke(self, msg):
         self.peer_choking = True
@@ -138,13 +159,11 @@ class Peer(object):
         self.peer_interested = True
         if self.am_choking:
             self.add_message(Msg('unchoke')) # TODO
-            self.am_choking = False
 
     def _not_interested(self, msg):
         self.peer_interested = False
         if not self.am_choking:
             self.add_message(Msg('choke'))
-            self.am_choking = True
 
     def _have_or_bitfield(self, msg):
         if msg.kind == 'bitfield':
@@ -162,7 +181,6 @@ class Peer(object):
         strat_interested = self.atorrent.strategy.am_interested(self)
 
         if not self.am_interested and strat_interested:
-            self.am_interested = True
             self.add_message(Msg('interested'))
             return
 
@@ -170,6 +188,7 @@ class Peer(object):
             self.prepare_next_request()
 
     def _piece(self, msg):
+        # TODO: error checking on msg params
         print 'Reading message piece %d' % msg.index
         if self.peer_choking:
             log.error('in an impossible state of being choked yet receiving a msg..?')
@@ -181,17 +200,20 @@ class Peer(object):
             self.atorrent.broadcast_have(msg.index, exclude=self)
             piece = self.atorrent.pieces[msg.index]
             self.atorrent.file_writer.add_piece(msg.index, piece.data)
+            if self.atorrent.strategy.has_all_pieces():
+                self.atorrent.finish()
+                return
 
         if self.atorrent.strategy.am_interested(self):
             self.prepare_next_request()
 
     def prepare_next_request(self):
+        """Add the next requests messages to the write queue."""
         for msg in self.atorrent.strategy.get_next_request(self):
             self.add_message(msg)
 
     def write_data(self):
         print self.send_queue
-
         for s in self.send_queue:
             self.write_buffer += str(s)
 
@@ -203,8 +225,9 @@ class Peer(object):
             # print 'num bytes written', bytes_sent
             self.write_buffer = self.write_buffer[bytes_sent:]
             self.atorrent.client.reactor.unreg_writer(self)
-        # else:
-        #     self.reactor.remove_writer(self)
+        else:
+            log.error("write_data() called for %s with no write_buffer" %
+                      repr(self))
 
     def parse_message(self, buff):
         """Returns a tuple of a list of Msg's and the remaining bytes.
@@ -226,7 +249,5 @@ class Peer(object):
 
         return msgs, buff
 
-    def is_good_handshake(self, buff):
-        if self.atorrent.info_hash != buff:
-            return False # TODO raise?
-        return True
+    def is_good_handshake(self, info_hash):
+        return self.atorrent.info_hash == info_hash

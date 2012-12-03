@@ -71,7 +71,7 @@ class Strategy(object):
         """Returns True if the strategy says we should be interested in a 
         peer, False otherwise."""
         relevant_pieces = peer.pieces.intersection(self.wants_pieces)
-        if relevant_pieces or len(self.wants_pieces) < REQ_THRESHOLD:
+        if relevant_pieces or (not self.has_all_pieces() and len(self.wants_pieces) < REQ_THRESHOLD):
             return True
 
         return False
@@ -99,6 +99,12 @@ class Strategy(object):
             ]
 
         return msgs
+
+    def has_all_pieces(self):
+        if len(self.has_pieces) == self.atorrent.num_pieces():
+            assert not self.wants_pieces
+            return True
+        return False
 
     # TODO: Place in ActiveTorrent
     def get_bitfield(self):
